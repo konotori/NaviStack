@@ -1111,7 +1111,9 @@ A: `.interactiveDismissDisabled(condition)` — not interceptors. See [Use Case 
 A: Yes — inject the router ([Use Case 8](#8-logout--reset-everything-from-a-view-model)). The router is `@MainActor`, so call it from `@MainActor` contexts.
 
 **Q: Navigation after async work?**
-A: ```swift
+A:
+
+```swift
 Task {
     await viewModel.save()
     router.push(.orderDetail(id: "42"))   // Task inherits @MainActor from the view

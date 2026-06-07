@@ -1111,7 +1111,9 @@ A: `.interactiveDismissDisabled(condition)` — không phải interceptor. Xem [
 A: Được — inject router vào ([Tình huống 8](#8-đăng-xuất--đặt-lại-mọi-thứ-từ-view-model)). Router là `@MainActor`, hãy gọi từ ngữ cảnh `@MainActor`.
 
 **Q: Điều hướng sau khi xử lý async?**
-A: ```swift
+A:
+
+```swift
 Task {
     await viewModel.save()
     router.push(.orderDetail(id: "42"))   // Task thừa kế @MainActor từ view
