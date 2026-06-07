@@ -1,5 +1,10 @@
 # 🧭 NaviStack
 
+![Swift](https://img.shields.io/badge/Swift-6.0-orange?logo=swift)
+![Platforms](https://img.shields.io/badge/Platforms-iOS%2016%2B%20%7C%20macOS%2013%2B-blue?logo=apple)
+![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen)
+![License](https://img.shields.io/badge/License-MIT-lightgrey)
+
 Hệ thống điều hướng type-safe cho SwiftUI, có khả năng can thiệp vào từng bước điều hướng. Quản lý stack tập trung, xử lý sheet/cover toàn cục, API hỗ trợ sẵn deep link, và chuỗi interceptor hai giai đoạn cho auth guard, analytics, khóa điều hướng.
 
 🇬🇧 [Read in English](README.md)

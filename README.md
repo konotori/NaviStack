@@ -1,5 +1,10 @@
 # 🧭 NaviStack
 
+![Swift](https://img.shields.io/badge/Swift-6.0-orange?logo=swift)
+![Platforms](https://img.shields.io/badge/Platforms-iOS%2016%2B%20%7C%20macOS%2013%2B-blue?logo=apple)
+![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen)
+![License](https://img.shields.io/badge/License-MIT-lightgrey)
+
 A type-safe, interceptable navigation system for SwiftUI. Centralized stack management, global sheet/cover handling, deep-link-ready APIs, and a two-phase interceptor pipeline for auth guards, analytics, and navigation locks.
 
 🇻🇳 [Đọc bản tiếng Việt](README.vi.md)
@@ -134,7 +139,7 @@ sequenceDiagram
     Note over R: ② notices the change happened<br/>without its involvement<br/>(internal flag rules out its own mutations)
     Note over R: ③ reconciles routeStack —<br/>the difference tells it exactly<br/>which routes were popped
     R->>I: ④ didProcess(.systemPop([poppedRoutes]))
-    Note over R,I: no shouldProcess — the transition already<br/>happened; nothing left to allow or block
+    Note over R,I: no shouldProcess — the transition already<br/>happened, nothing left to allow or block
 ```
 
 This is why analytics interceptors see **every** exit, including gesture-driven ones — and why `.systemPop` can never be blocked.
