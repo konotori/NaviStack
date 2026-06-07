@@ -8,7 +8,7 @@
 import SwiftUI
 import OSLog
 
-private let logger = Logger(subsystem: "com.router", category: "navigation")
+private let logger = Logger(subsystem: "com.navistack", category: "navigation")
 
 /// A type-safe navigation router for SwiftUI.
 ///

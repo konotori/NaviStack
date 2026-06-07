@@ -2,7 +2,7 @@ import Testing
 import SwiftUI
 import Foundation
 
-@testable import Router
+@testable import NaviStack
 
 // MARK: - Test Helpers
 

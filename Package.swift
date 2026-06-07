@@ -4,24 +4,24 @@
 import PackageDescription
 
 let package = Package(
-    name: "Router",
+    name: "NaviStack",
 	platforms: [
 		.iOS(.v16),
 		.macOS(.v13)
 	],
     products: [
         .library(
-            name: "Router",
-            targets: ["Router"]
+            name: "NaviStack",
+            targets: ["NaviStack"]
         ),
     ],
     targets: [
         .target(
-            name: "Router"
+            name: "NaviStack"
         ),
         .testTarget(
-            name: "RouterTests",
-            dependencies: ["Router"]
+            name: "NaviStackTests",
+            dependencies: ["NaviStack"]
         ),
     ],
     swiftLanguageModes: [.v6]

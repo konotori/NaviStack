@@ -1,4 +1,4 @@
-# 🧭 Router
+# 🧭 NaviStack
 
 Hệ thống điều hướng type-safe cho SwiftUI, có khả năng can thiệp vào từng bước điều hướng. Quản lý stack tập trung, xử lý sheet/cover toàn cục, API hỗ trợ sẵn deep link, và chuỗi interceptor hai giai đoạn cho auth guard, analytics, khóa điều hướng.
 
@@ -6,7 +6,7 @@ Hệ thống điều hướng type-safe cho SwiftUI, có khả năng can thiệp
 
 ## 📋 Mục lục
 
-- [Tại sao dùng Router?](#-tại-sao-dùng-router)
+- [Tại sao dùng NaviStack?](#-tại-sao-dùng-navistack)
 - [Tính năng](#-tính-năng)
 - [Kiến trúc & Cách hoạt động](#-kiến-trúc--cách-hoạt-động)
 - [Yêu cầu](#-yêu-cầu)
@@ -25,7 +25,7 @@ Hệ thống điều hướng type-safe cho SwiftUI, có khả năng can thiệp
 
 ---
 
-## 🎯 Tại sao dùng Router?
+## 🎯 Tại sao dùng NaviStack?
 
 Điều hướng SwiftUI theo cách truyền thống thường dẫn đến:
 
@@ -34,7 +34,7 @@ Hệ thống điều hướng type-safe cho SwiftUI, có khả năng can thiệp
 - Luồng màn hình khó viết test
 - Không type-safe, không theo dõi được lịch sử điều hướng
 
-**Router** tập trung hóa điều hướng với:
+**NaviStack** tập trung hóa điều hướng với:
 
 - Một đối tượng duy nhất nắm toàn bộ trạng thái điều hướng của mỗi `NavigationStack`
 - Route định nghĩa bằng enum, type-safe
@@ -54,7 +54,7 @@ Hệ thống điều hướng type-safe cho SwiftUI, có khả năng can thiệp
 - ✅ **Nhận biết thao tác back của hệ thống** — vuốt back được báo cho interceptor qua `.systemPop`
 - ✅ **Interceptor hai giai đoạn** — chặn trước khi xảy ra, quan sát sau khi hoàn tất; gỡ được bằng token
 - ✅ **Khôi phục trạng thái** — `encodedStack()` / `restoreStack(from:)` khi route là `Codable`
-- ✅ **Ghi log có cấu trúc** — `os.Logger` (subsystem `com.router`), lọc được trong Console.app
+- ✅ **Ghi log có cấu trúc** — `os.Logger` (subsystem `com.navistack`), lọc được trong Console.app
 
 ---
 
@@ -67,7 +67,7 @@ Phần này giải thích từng thành phần của package, để bất kỳ d
 Package chỉ gồm **ba file source** và **năm kiểu public**:
 
 ```
-Router
+NaviStack
 ├── BaseRouter.swift        →  BaseRouter            (bản thân router)
 ├── Interceptor.swift       →  protocol Interceptor, InterceptorToken
 └── InterceptorEvent.swift  →  NavigationEvent, SheetEvent, CoverEvent (+ PushStrategy)
@@ -85,17 +85,15 @@ Router
 
 Bên trong, `BaseRouter` lưu navigation stack ở hai chỗ, và đây là quyết định thiết kế quan trọng nhất cần hiểu:
 
-```
-┌───────────────────────── BaseRouter ─────────────────────────┐
-│                                                              │
-│  @Published path: NavigationPath   ← thứ SwiftUI điều khiển  │
-│             (opaque — không đọc ngược lại được)              │
-│                                                              │
-│  private routeStack: [NavRoute]    ← bản sao có kiểu         │
-│             (trả lời: currentRoute, popTo, containsRoute…)   │
-│                                                              │
-│  bất biến: path.count == routeStack.count, luôn luôn         │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    UI["NavigationStack"] <--> P
+    subgraph BaseRouter
+        direction TB
+        P["<b>@Published path: NavigationPath</b><br/>thứ SwiftUI điều khiển<br/><i>opaque — không đọc ngược lại được</i>"]
+        S["<b>private routeStack: [NavRoute]</b><br/>bản sao có kiểu<br/><i>trả lời currentRoute, popTo, containsRoute…</i>"]
+        P <-->|"luôn đồng bộ từng bước<br/><b>path.count == routeStack.count</b>"| S
+    end
 ```
 
 - **`path`** là `NavigationPath` của SwiftUI — thứ duy nhất `NavigationStack` hiểu được. Nó *chỉ ghi được, không đọc được*: bạn append và remove được, nhưng không bao giờ hỏi được "route ở vị trí số 2 là gì?"
@@ -105,24 +103,16 @@ Mọi thay đổi đều cập nhật **cả hai nơi cùng lúc**. Khi *hệ th
 
 ### Luồng ① — hành trình của một lệnh điều hướng (`push`, `pop`, `setStack`, …)
 
-```
-router.push(.profile)
-        │
-        ▼
-①  Tạo event                  .push(.profile, strategy: .always)
-        │
-        ▼
-②  Xin phép                   shouldProcess(event)  trên interceptor 1 → 2 → … n
-        │                     └── bất kỳ cái nào trả false → DỪNG. Không có gì thay đổi.
-        ▼  tất cả đồng ý
-③  Cập nhật trạng thái        path.append(...)  +  routeStack.append(...)
-        │                     (luôn đi cùng nhau — giữ vững bất biến)
-        ▼
-④  SwiftUI phản ứng           NavigationStack thấy path mới → đẩy màn hình lên
-        │
-        ▼
-⑤  Thông báo                  didProcess(event)  trên interceptor 1 → 2 → … n
-                              (analytics, logging — trạng thái đã chốt tại đây)
+```mermaid
+flowchart TD
+    A(["router.push(.profile)"]) --> B["① <b>Tạo event</b><br/>.push(.profile, strategy: .always)"]
+    B --> C{"② <b>Xin phép</b><br/>shouldProcess(event)<br/>interceptor 1 → 2 → … n"}
+    C -->|"bất kỳ cái nào trả <b>false</b>"| X(["⛔ Hủy bỏ<br/>không có gì thay đổi"])
+    C -->|"tất cả trả <b>true</b>"| D["③ <b>Cập nhật trạng thái</b><br/>path.append + routeStack.append<br/><i>luôn đi cùng nhau — giữ vững bất biến</i>"]
+    D --> E["④ <b>SwiftUI phản ứng</b><br/>NavigationStack thấy path mới<br/>và đẩy màn hình lên"]
+    E --> F(["⑤ <b>Thông báo</b><br/>didProcess(event) trên mọi interceptor<br/><i>analytics, logging — trạng thái đã chốt</i>"])
+    style X fill:#fdd,stroke:#c00
+    style F fill:#dfd,stroke:#080
 ```
 
 Năm bước này áp dụng cho mọi API điều hướng: `pop`, `popTo`, `popToRoot`, `replace`, `setStack`, `presentSheet`, `dismissSheet` và các hàm tương ứng cho cover. Chỉ khác nhau ở loại event.
@@ -131,25 +121,20 @@ Năm bước này áp dụng cho mọi API điều hướng: `pop`, `popTo`, `po
 
 User có thể rời màn hình mà không bao giờ gọi router: vuốt cạnh trái, nút back trên navigation bar, hoặc menu back khi nhấn giữ. Router *quan sát* các thao tác này thay vì điều khiển chúng:
 
-```
-user vuốt back
-        │
-        ▼
-①  SwiftUI pop màn hình và ghi path ngắn hơn
-   ngược lại qua NavigationStack(path: $router.path)
-        │
-        ▼
-②  Router nhận ra `path` thay đổi mà không phải do mình
-   (một cờ nội bộ phân biệt thay đổi của router với thay đổi từ bên ngoài)
-        │
-        ▼
-③  Đối chiếu: routeStack bỏ đi đúng số route tương ứng
-   (phần chênh lệch cho router biết chính xác những route nào vừa bị pop)
-        │
-        ▼
-④  Thông báo: didProcess(.systemPop([cácRouteBịPop]))
-   — không có shouldProcess: chuyển màn đã xảy ra rồi,
-     không còn gì để "cho phép" hay "chặn" nữa
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant N as NavigationStack
+    participant R as BaseRouter
+    participant I as Interceptors
+
+    U->>N: vuốt back
+    Note over N: ① pop màn hình và ghi path<br/>ngắn hơn ngược lại qua binding
+    N->>R: path thay đổi
+    Note over R: ② nhận ra thay đổi không phải do mình<br/>(cờ nội bộ loại trừ các thay đổi của chính router)
+    Note over R: ③ đối chiếu routeStack —<br/>phần chênh lệch cho biết chính xác<br/>những route nào vừa bị pop
+    R->>I: ④ didProcess(.systemPop([cácRouteBịPop]))
+    Note over R,I: không có shouldProcess — chuyển màn đã xảy ra rồi,<br/>không còn gì để cho phép hay chặn
 ```
 
 Đây là lý do interceptor analytics thấy được **mọi** lần thoát màn, kể cả bằng gesture — và cũng là lý do `.systemPop` không bao giờ chặn được.
@@ -191,7 +176,7 @@ Router cung cấp sẵn `sheetBinding` / `fullScreenCoverBinding` — các `Bind
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/konotori/Router.git", from: "1.0.0")
+    .package(url: "https://github.com/konotori/NaviStack.git", from: "1.0.0")
 ]
 ```
 
@@ -206,7 +191,7 @@ Thêm các file source: `BaseRouter.swift`, `Interceptor.swift`, `InterceptorEve
 ### Bước 1: Định nghĩa Routes
 
 ```swift
-import Router
+import NaviStack
 
 // Các màn hình dạng push — bắt buộc Hashable, chỉ cần Codable nếu muốn khôi phục trạng thái
 enum AppRoute: Hashable, Codable {
@@ -343,7 +328,7 @@ Button("Settings") {
 
 **Lý do:** `NavigationPath` là kiểu opaque — router không thể đọc nội dung bên trong. Khi `NavigationLink(value:)` làm path dài ra sau lưng router, `currentRoute`, `navigationDepth` và `popTo` sẽ sai một cách âm thầm, và độ lệch này tồn tại cho đến khi quay về root. (Xem [mô hình trạng thái](#mô-hình-trạng-thái--tại-sao-router-giữ-hai-nơi-chứa-stack) để hiểu đầy đủ.)
 
-Router phát hiện việc này lúc runtime và ghi một log mức **fault** (xem được trong Console.app dưới subsystem `com.router`):
+Router phát hiện việc này lúc runtime và ghi một log mức **fault** (xem được trong Console.app dưới subsystem `com.navistack`):
 
 ```
 NavigationPath grew outside the router (path: 3, tracked: 2).
@@ -1001,7 +986,7 @@ Những hành vi của iOS mà **không thư viện điều hướng nào kiểm
 |---|---|---|
 | Vuốt back / nút back | Interceptor không chặn được (đã xảy ra rồi). Được báo qua `.systemPop` đến `didProcess`. | Muốn ngăn: `.navigationBarBackButtonHidden(true)` trên màn đó |
 | Kéo sheet xuống để đóng | Interceptor không chặn được. Được báo qua `.dismiss(programmatic: false)` đến `didProcess`. | Muốn ngăn: `.interactiveDismissDisabled(condition)` |
-| `NavigationLink(value:)` | Đi vòng qua router → lệch trạng thái. Được phát hiện và ghi log mức fault (subsystem `com.router`). | Luôn điều hướng qua `router.push(...)` |
+| `NavigationLink(value:)` | Đi vòng qua router → lệch trạng thái. Được phát hiện và ghi log mức fault (subsystem `com.navistack`). | Luôn điều hướng qua `router.push(...)` |
 | Sheet trên sheet | Present mới sẽ thay nội dung sheet hiện tại. | Router con bên trong sheet ([Tình huống 6](#6-luồng-phức-tạp-trong-sheet--router-con)) |
 | Thay đổi `path` nhiều lần trong một runloop | Dễ lỗi với SwiftUI (đặc biệt iOS 16). | Dùng `setStack(_:)` — chỉ một lần thay đổi |
 
@@ -1121,7 +1106,7 @@ Task {
 ```
 
 **Q: Tại sao `currentRoute` bị sai?**
-A: Gần như chắc chắn có `NavigationLink(value:)` ở đâu đó. Kiểm tra Console.app với log fault subsystem `com.router`. Xem [Quy tắc vàng](#-quy-tắc-vàng).
+A: Gần như chắc chắn có `NavigationLink(value:)` ở đâu đó. Kiểm tra Console.app với log fault subsystem `com.navistack`. Xem [Quy tắc vàng](#-quy-tắc-vàng).
 
 **Q: Router có hỗ trợ `NavigationSplitView` không?**
 A: Hiện chưa — nó nhắm vào `NavigationStack`. Layout nhiều cột vẫn dùng được một router cho stack của mỗi cột.

@@ -1,4 +1,4 @@
-# 🧭 Router
+# 🧭 NaviStack
 
 A type-safe, interceptable navigation system for SwiftUI. Centralized stack management, global sheet/cover handling, deep-link-ready APIs, and a two-phase interceptor pipeline for auth guards, analytics, and navigation locks.
 
@@ -6,7 +6,7 @@ A type-safe, interceptable navigation system for SwiftUI. Centralized stack mana
 
 ## 📋 Table of Contents
 
-- [Why Router?](#-why-router)
+- [Why NaviStack?](#-why-navistack)
 - [Features](#-features)
 - [Architecture & How It Works](#-architecture--how-it-works)
 - [Requirements](#-requirements)
@@ -25,7 +25,7 @@ A type-safe, interceptable navigation system for SwiftUI. Centralized stack mana
 
 ---
 
-## 🎯 Why Router?
+## 🎯 Why NaviStack?
 
 Traditional SwiftUI navigation often leads to:
 
@@ -34,7 +34,7 @@ Traditional SwiftUI navigation often leads to:
 - Hard-to-test flows
 - No type safety, no navigation history
 
-**Router** centralizes navigation with:
+**NaviStack** centralizes navigation with:
 
 - One object that owns all navigation state per `NavigationStack`
 - Type-safe route enums
@@ -54,7 +54,7 @@ Traditional SwiftUI navigation often leads to:
 - ✅ **System back detection** — back swipes are reported to interceptors as `.systemPop`
 - ✅ **Two-phase interceptors** — block before, observe after; removable by token
 - ✅ **State restoration** — `encodedStack()` / `restoreStack(from:)` when routes are `Codable`
-- ✅ **Structured logging** — `os.Logger` (subsystem `com.router`), filterable in Console.app
+- ✅ **Structured logging** — `os.Logger` (subsystem `com.navistack`), filterable in Console.app
 
 ---
 
@@ -67,7 +67,7 @@ This section explains every moving part so that any developer can understand the
 The package has exactly **three source files** and **five public types**:
 
 ```
-Router
+NaviStack
 ├── BaseRouter.swift        →  BaseRouter            (the router itself)
 ├── Interceptor.swift       →  Interceptor protocol, InterceptorToken
 └── InterceptorEvent.swift  →  NavigationEvent, SheetEvent, CoverEvent (+ PushStrategy)
@@ -85,17 +85,15 @@ Router
 
 Internally, `BaseRouter` holds the navigation stack twice, and this is the key design decision to understand:
 
-```
-┌───────────────────────── BaseRouter ─────────────────────────┐
-│                                                              │
-│  @Published path: NavigationPath     ← what SwiftUI drives   │
-│             (opaque — cannot be read back)                   │
-│                                                              │
-│  private routeStack: [NavRoute]      ← typed mirror          │
-│             (answers: currentRoute, popTo, containsRoute…)   │
-│                                                              │
-│  invariant: path.count == routeStack.count, always           │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    UI["NavigationStack"] <--> P
+    subgraph BaseRouter
+        direction TB
+        P["<b>@Published path: NavigationPath</b><br/>what SwiftUI drives<br/><i>opaque — cannot be read back</i>"]
+        S["<b>private routeStack: [NavRoute]</b><br/>typed mirror<br/><i>answers currentRoute, popTo, containsRoute…</i>"]
+        P <-->|"kept in lockstep<br/><b>path.count == routeStack.count</b>, always"| S
+    end
 ```
 
 - **`path`** is SwiftUI's `NavigationPath` — the only thing `NavigationStack` understands. It is *write-only*: you can append and remove, but you can never ask "what is the route at position 2?"
@@ -105,24 +103,16 @@ Every mutation updates **both containers together**. When the *system* changes `
 
 ### Flow ① — life of a programmatic navigation (`push`, `pop`, `setStack`, …)
 
-```
-router.push(.profile)
-        │
-        ▼
-①  Build the event             .push(.profile, strategy: .always)
-        │
-        ▼
-②  Ask permission              shouldProcess(event)  on interceptor 1 → 2 → … n
-        │                      └── any returns false → STOP. Nothing changes at all.
-        ▼  all true
-③  Mutate state                path.append(...)  +  routeStack.append(...)
-        │                      (always together — the invariant holds)
-        ▼
-④  SwiftUI reacts              NavigationStack sees the new path → pushes the screen
-        │
-        ▼
-⑤  Notify                      didProcess(event)  on interceptor 1 → 2 → … n
-                               (analytics, logging — state is already final here)
+```mermaid
+flowchart TD
+    A(["router.push(.profile)"]) --> B["① <b>Build the event</b><br/>.push(.profile, strategy: .always)"]
+    B --> C{"② <b>Ask permission</b><br/>shouldProcess(event)<br/>interceptor 1 → 2 → … n"}
+    C -->|"any returns <b>false</b>"| X(["⛔ Cancelled<br/>nothing changes at all"])
+    C -->|"all return <b>true</b>"| D["③ <b>Mutate state</b><br/>path.append + routeStack.append<br/><i>always together — the invariant holds</i>"]
+    D --> E["④ <b>SwiftUI reacts</b><br/>NavigationStack sees the new path<br/>and pushes the screen"]
+    E --> F(["⑤ <b>Notify</b><br/>didProcess(event) on every interceptor<br/><i>analytics, logging — state is final here</i>"])
+    style X fill:#fdd,stroke:#c00
+    style F fill:#dfd,stroke:#080
 ```
 
 The same five steps apply to every programmatic API: `pop`, `popTo`, `popToRoot`, `replace`, `setStack`, `presentSheet`, `dismissSheet`, and the cover equivalents. Only the event type differs.
@@ -131,25 +121,20 @@ The same five steps apply to every programmatic API: `pop`, `popTo`, `popToRoot`
 
 The user can leave a screen without ever calling the router: edge swipe, the navigation bar back button, or the long-press back menu. The router *observes* these instead of driving them:
 
-```
-user swipes back
-        │
-        ▼
-①  SwiftUI pops the screen and writes the shorter path
-   back through NavigationStack(path: $router.path)
-        │
-        ▼
-②  The router notices `path` changed without its involvement
-   (an internal flag distinguishes its own mutations from external ones)
-        │
-        ▼
-③  Reconcile: routeStack drops the same number of routes
-   (the difference tells the router exactly which routes were popped)
-        │
-        ▼
-④  Notify: didProcess(.systemPop([poppedRoutes]))
-   — no shouldProcess: the transition already happened, there is
-     nothing left to "allow" or "block"
+```mermaid
+sequenceDiagram
+    actor U as User
+    participant N as NavigationStack
+    participant R as BaseRouter
+    participant I as Interceptors
+
+    U->>N: swipe back
+    Note over N: ① pops the screen and writes the<br/>shorter path through the binding
+    N->>R: path changed
+    Note over R: ② notices the change happened<br/>without its involvement<br/>(internal flag rules out its own mutations)
+    Note over R: ③ reconciles routeStack —<br/>the difference tells it exactly<br/>which routes were popped
+    R->>I: ④ didProcess(.systemPop([poppedRoutes]))
+    Note over R,I: no shouldProcess — the transition already<br/>happened; nothing left to allow or block
 ```
 
 This is why analytics interceptors see **every** exit, including gesture-driven ones — and why `.systemPop` can never be blocked.
@@ -191,7 +176,7 @@ The router exposes `sheetBinding` / `fullScreenCoverBinding` — ready-made `Bin
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/konotori/Router.git", from: "1.0.0")
+    .package(url: "https://github.com/konotori/NaviStack.git", from: "1.0.0")
 ]
 ```
 
@@ -206,7 +191,7 @@ Add the source files: `BaseRouter.swift`, `Interceptor.swift`, `InterceptorEvent
 ### Step 1: Define Routes
 
 ```swift
-import Router
+import NaviStack
 
 // Pushed screens — Hashable required, Codable only if you want state restoration
 enum AppRoute: Hashable, Codable {
@@ -343,7 +328,7 @@ Button("Settings") {
 
 **Why:** `NavigationPath` is opaque — the router cannot read what's inside it. When `NavigationLink(value:)` grows the path behind the router's back, `currentRoute`, `navigationDepth`, and `popTo` become silently wrong, and the desync persists until you return to root. (See [the state model](#the-state-model--why-the-router-keeps-two-containers) for the full explanation.)
 
-The router detects this at runtime and logs a **fault** (visible in Console.app under subsystem `com.router`):
+The router detects this at runtime and logs a **fault** (visible in Console.app under subsystem `com.navistack`):
 
 ```
 NavigationPath grew outside the router (path: 3, tracked: 2).
@@ -1001,7 +986,7 @@ Things iOS does that **no router library can fully control** — know them befor
 |---|---|---|
 | Back swipe / back button | Cannot be blocked by interceptors (already happened). Reported as `.systemPop` to `didProcess`. | To prevent: `.navigationBarBackButtonHidden(true)` on the screen |
 | Sheet drag-to-dismiss | Cannot be blocked by interceptors. Reported as `.dismiss(programmatic: false)` to `didProcess`. | To prevent: `.interactiveDismissDisabled(condition)` |
-| `NavigationLink(value:)` | Bypasses the router → state desync. Detected and logged as a fault (`com.router` subsystem). | Always navigate via `router.push(...)` |
+| `NavigationLink(value:)` | Bypasses the router → state desync. Detected and logged as a fault (`com.navistack` subsystem). | Always navigate via `router.push(...)` |
 | Sheet over sheet | Presenting replaces the current sheet's content. | Child router inside the sheet ([Use Case 6](#6-complex-flow-inside-a-sheet--child-router)) |
 | Multiple `path` mutations per runloop | Fragile in SwiftUI (iOS 16 especially). | Use `setStack(_:)` — single mutation |
 
@@ -1121,7 +1106,7 @@ Task {
 ```
 
 **Q: Why is `currentRoute` wrong?**
-A: Almost always a `NavigationLink(value:)` somewhere. Check Console.app for the `com.router` fault log. See [The Golden Rule](#-the-golden-rule).
+A: Almost always a `NavigationLink(value:)` somewhere. Check Console.app for the `com.navistack` fault log. See [The Golden Rule](#-the-golden-rule).
 
 **Q: Does the router support `NavigationSplitView`?**
 A: Not currently — it targets `NavigationStack`. Multi-column layouts can still use one router per column's stack.
