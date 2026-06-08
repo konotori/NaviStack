@@ -1,36 +1,37 @@
-# 🧭 NaviStack
+# NaviStack
 
-![Swift](https://img.shields.io/badge/Swift-6.0-orange?logo=swift)
-![Platforms](https://img.shields.io/badge/Platforms-iOS%2016%2B%20%7C%20macOS%2013%2B-blue?logo=apple)
-![SPM](https://img.shields.io/badge/SPM-compatible-brightgreen)
-![License](https://img.shields.io/badge/License-MIT-lightgrey)
+**A type-safe, interceptable navigation system for SwiftUI — centralized stack management, deep-link ready, Swift 6 native.**
 
-A type-safe, interceptable navigation system for SwiftUI. Centralized stack management, global sheet/cover handling, deep-link-ready APIs, and a two-phase interceptor pipeline for auth guards, analytics, and navigation locks.
+[![Swift 6.0](https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white)](https://swift.org)
+[![Platforms](https://img.shields.io/badge/Platforms-iOS%2016%2B%20%7C%20macOS%2013%2B-blue?logo=apple)](#requirements)
+[![SPM](https://img.shields.io/badge/SwiftPM-compatible-brightgreen)](#installation)
+[![License: MIT](https://img.shields.io/badge/License-MIT-lightgrey)](LICENSE)
 
-🇻🇳 [Đọc bản tiếng Việt](README.vi.md)
+> English | [Tiếng Việt](README.vi.md)
 
-## 📋 Table of Contents
+Centralized stack management, global sheet/cover handling, deep-link-ready APIs, and a two-phase interceptor pipeline for auth guards, analytics, and navigation locks.
 
-- [Why NaviStack?](#-why-navistack)
-- [Features](#-features)
-- [Architecture & How It Works](#-architecture--how-it-works)
-- [Requirements](#-requirements)
-- [Installation](#-installation)
-- [Quick Start](#-quick-start)
-- [The Golden Rule](#-the-golden-rule)
-- [Navigation API](#-navigation-api)
-- [Sheets & Full-Screen Covers](#-sheets--full-screen-covers)
-- [Interceptors](#-interceptors)
-- [Production Use Cases](#-production-use-cases)
-- [Limitations & Gotchas](#-limitations--gotchas)
-- [Properties Reference](#-properties-reference)
-- [Testing](#-testing)
-- [FAQ](#-faq)
-- [License](#-license)
+## Table of Contents
 
----
+- [Why NaviStack?](#why-navistack)
+- [Features](#features)
+- [Architecture & How It Works](#architecture--how-it-works)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [The Golden Rule](#the-golden-rule)
+- [Navigation API](#navigation-api)
+- [Sheets & Full-Screen Covers](#sheets--full-screen-covers)
+- [Interceptors](#interceptors)
+- [Production Use Cases](#production-use-cases)
+- [Limitations & Gotchas](#limitations--gotchas)
+- [Properties Reference](#properties-reference)
+- [Testing](#testing)
+- [FAQ](#faq)
+- [Acknowledgements](#acknowledgements)
+- [License](#license)
 
-## 🎯 Why NaviStack?
+## Why NaviStack?
 
 Traditional SwiftUI navigation often leads to:
 
@@ -47,23 +48,19 @@ Traditional SwiftUI navigation often leads to:
 - Interceptor hooks for guards, analytics, locks
 - One-step deep linking (`setStack`) and state restoration
 
----
+## Features
 
-## ✨ Features
+- **Swift 6 native** — strict concurrency, `@MainActor` router & interceptors
+- **Type-safe navigation** — enum-based routes
+- **Push strategies** — `.always`, `.ifNotExists`, `.navigateOrPush`
+- **One-step deep linking** — `setStack(_:)` replaces the whole stack in a single transition
+- **`dismissAll()`** — close every modal and pop to root in one call
+- **System back detection** — back swipes are reported to interceptors as `.systemPop`
+- **Two-phase interceptors** — block before, observe after; removable by token
+- **State restoration** — `encodedStack()` / `restoreStack(from:)` when routes are `Codable`
+- **Structured logging** — `os.Logger` (subsystem `com.navistack`), filterable in Console.app
 
-- ✅ **Swift 6 native** — strict concurrency, `@MainActor` router & interceptors
-- ✅ **Type-safe navigation** — enum-based routes
-- ✅ **Push strategies** — `.always`, `.ifNotExists`, `.navigateOrPush`
-- ✅ **One-step deep linking** — `setStack(_:)` replaces the whole stack in a single transition
-- ✅ **`dismissAll()`** — close every modal and pop to root in one call
-- ✅ **System back detection** — back swipes are reported to interceptors as `.systemPop`
-- ✅ **Two-phase interceptors** — block before, observe after; removable by token
-- ✅ **State restoration** — `encodedStack()` / `restoreStack(from:)` when routes are `Codable`
-- ✅ **Structured logging** — `os.Logger` (subsystem `com.navistack`), filterable in Console.app
-
----
-
-## 🏗 Architecture & How It Works
+## Architecture & How It Works
 
 This section explains every moving part so that any developer can understand the package in one read.
 
@@ -104,7 +101,7 @@ flowchart LR
 - **`path`** is SwiftUI's `NavigationPath` — the only thing `NavigationStack` understands. It is *write-only*: you can append and remove, but you can never ask "what is the route at position 2?"
 - **`routeStack`** is a plain `[NavRoute]` array the router maintains in lockstep with `path`. It exists *because* `path` is opaque — without it, `currentRoute`, `navigationDepth`, and `popTo(_:)` would be impossible to implement.
 
-Every mutation updates **both containers together**. When the *system* changes `path` (back swipe), the router reconciles `routeStack` immediately (see flow ② below). This is also why the [Golden Rule](#-the-golden-rule) exists: a `NavigationLink(value:)` writes into `path` only, and the router has no way to know *what* was pushed.
+Every mutation updates **both containers together**. When the *system* changes `path` (back swipe), the router reconciles `routeStack` immediately (see flow ② below). This is also why the [Golden Rule](#the-golden-rule) exists: a `NavigationLink(value:)` writes into `path` only, and the router has no way to know *what* was pushed.
 
 ### Flow ① — life of a programmatic navigation (`push`, `pop`, `setStack`, …)
 
@@ -164,34 +161,45 @@ The router exposes `sheetBinding` / `fullScreenCoverBinding` — ready-made `Bin
 4. **Fail loud in development.** If `path` grows behind the router's back, a `fault`-level log fires immediately instead of letting `currentRoute` rot silently.
 5. **Fully synchronous & testable.** Every API call completes synchronously; events are `Equatable`; no UI tests needed for navigation logic.
 
----
+## Requirements
 
-## 📦 Requirements
-
-- iOS 16.0+ / macOS 13.0+
-- Swift 6.0 toolchain (Xcode 16+)
+| | Minimum |
+|---|---|
+| iOS | 16.0 |
+| macOS | 13.0 |
+| Swift | 6.0 (Xcode 16+) |
 
 > The package compiles in Swift 6 language mode. Apps consuming it can be in Swift 5 or Swift 6 mode — the `@MainActor` interceptor protocol works in both.
 
----
+## Installation
 
-## 🚀 Installation
+### Xcode
+
+1. **File → Add Package Dependencies…**
+2. Paste the repository URL into the search field:
+   ```
+   https://github.com/konotori/NaviStack.git
+   ```
+3. Set the dependency rule to **Up to Next Major Version** from `1.0.0`, then click **Add Package**.
 
 ### Swift Package Manager
 
+Add the dependency to your `Package.swift`:
+
 ```swift
-dependencies: [
-    .package(url: "https://github.com/konotori/NaviStack.git", from: "1.0.0")
-]
+.package(url: "https://github.com/konotori/NaviStack.git", from: "1.0.0")
 ```
 
-### Manual Installation
+Then add `NaviStack` to your target:
 
-Add the source files: `BaseRouter.swift`, `Interceptor.swift`, `InterceptorEvent.swift`.
+```swift
+.target(
+    name: "MyApp",
+    dependencies: ["NaviStack"]
+)
+```
 
----
-
-## ⚡ Quick Start
+## Quick Start
 
 ### Step 1: Define Routes
 
@@ -311,9 +319,7 @@ struct HomeView: View {
 }
 ```
 
----
-
-## 📐 The Golden Rule
+## The Golden Rule
 
 > **Every navigation must go through the router.**
 
@@ -344,9 +350,7 @@ If you see this log, find and replace the offending `NavigationLink(value:)`.
 
 System-driven *removals* (back swipe, back button) are fully supported — see [System back & `.systemPop`](#system-back--systempop).
 
----
-
-## 🧭 Navigation API
+## Navigation API
 
 ### Push Strategies
 
@@ -403,9 +407,7 @@ router.dismissAll()   // dismiss cover → dismiss sheet → popToRoot
 
 Call this before handling a deep link — if a sheet is open when a push notification arrives, the destination would otherwise be built *behind* the sheet.
 
----
-
-## 📄 Sheets & Full-Screen Covers
+## Sheets & Full-Screen Covers
 
 ```swift
 router.presentSheet(.createPost)
@@ -438,9 +440,7 @@ Programmatic dismissal (`router.dismissSheet()`) **does** go through `shouldProc
 
 The router manages **one global sheet and one cover**. Presenting a new sheet while one is visible *replaces* its content rather than stacking. For sheet-over-sheet flows, give the sheet its own `NavigationStack` and child router — see [Use Case 6](#6-complex-flow-inside-a-sheet--child-router).
 
----
-
-## 🎯 Interceptors
+## Interceptors
 
 Interceptors are the extension point for cross-cutting navigation concerns: auth guards, analytics, logging, feature flags, navigation locks.
 
@@ -525,11 +525,9 @@ router.addInterceptor(FeatureFlagInterceptor(flags: flags))     // 2. then flags
 router.addInterceptor(AnalyticsInterceptor(analytics: tracker)) // 3. observers last
 ```
 
----
+## Production Use Cases
 
-## 🏭 Production Use Cases
-
-All examples below use the `AppRoute` / `AppSheet` / `AppCover` / `AppBaseRouter` definitions from [Quick Start](#-quick-start).
+All examples below use the `AppRoute` / `AppSheet` / `AppCover` / `AppBaseRouter` definitions from [Quick Start](#quick-start).
 
 ### 1. Auth Guard — block protected screens
 
@@ -981,9 +979,7 @@ struct MainTabView: View {
 
 Tab re-tap scrolls-to-top/pops in many apps — implement it with `homeRouter.popToRoot()` in your tab selection handler.
 
----
-
-## ⚠️ Limitations & Gotchas
+## Limitations & Gotchas
 
 Things iOS does that **no router library can fully control** — know them before shipping:
 
@@ -995,9 +991,7 @@ Things iOS does that **no router library can fully control** — know them befor
 | Sheet over sheet | Presenting replaces the current sheet's content. | Child router inside the sheet ([Use Case 6](#6-complex-flow-inside-a-sheet--child-router)) |
 | Multiple `path` mutations per runloop | Fragile in SwiftUI (iOS 16 especially). | Use `setStack(_:)` — single mutation |
 
----
-
-## 🔑 Properties Reference
+## Properties Reference
 
 | Property | Type | Description |
 |---|---|---|
@@ -1013,9 +1007,7 @@ Things iOS does that **no router library can fully control** — know them befor
 | `sheetBinding` | `Binding<SheetRoute?>` | Pass to `.sheet(item:)` |
 | `fullScreenCoverBinding` | `Binding<CoverRoute?>` | Pass to `.fullScreenCover(item:)` |
 
----
-
-## 🧪 Testing
+## Testing
 
 The router is fully unit-testable — no UI tests needed for navigation logic. Events are `Equatable`, so assertions are one-liners.
 
@@ -1084,9 +1076,7 @@ final class SpyInterceptor: Interceptor {
 }
 ```
 
----
-
-## ❓ FAQ
+## FAQ
 
 **Q: Can I have multiple routers?**
 A: Yes — one per `NavigationStack`. Tab apps use one per tab ([Use Case 11](#11-tab-based-apps--one-router-per-tab)); sheets with internal flows use a child router ([Use Case 6](#6-complex-flow-inside-a-sheet--child-router)).
@@ -1111,17 +1101,15 @@ Task {
 ```
 
 **Q: Why is `currentRoute` wrong?**
-A: Almost always a `NavigationLink(value:)` somewhere. Check Console.app for the `com.navistack` fault log. See [The Golden Rule](#-the-golden-rule).
+A: Almost always a `NavigationLink(value:)` somewhere. Check Console.app for the `com.navistack` fault log. See [The Golden Rule](#the-golden-rule).
 
 **Q: Does the router support `NavigationSplitView`?**
 A: Not currently — it targets `NavigationStack`. Multi-column layouts can still use one router per column's stack.
 
----
-
-## 📄 Acknowledgements
+## Acknowledgements
 
 This router library is inspired by and refactored from the original [NavigationRouter](https://github.com/duongcuong4395/MyPackage/blob/main/Sources/NavigationRouter) by Duong Cuong. This package adds the interceptor system, system-pop detection, one-step deep linking, state restoration, and Swift 6 support.
 
-## 📄 License
+## License
 
-MIT License
+[MIT](LICENSE)
